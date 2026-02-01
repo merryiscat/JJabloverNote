@@ -290,9 +290,15 @@ body {
     transition: all 0.2s;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     box-shadow: 0 0 25px rgba(0, 212, 255, 0.5), 0 0 25px rgba(255, 0, 128, 0.5);
     transform: translateY(-2px);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
 /* 플레이어 */
@@ -596,8 +602,41 @@ body {
 }
 
 .summary-result.loading {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+}
+
+.summary-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     color: var(--neon-blue);
+    font-size: 0.95rem;
+}
+
+.summary-loading .spinner {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+}
+
+.summary-loading .loading-text {
+    font-weight: 500;
+}
+
+.summary-loading .loading-dots::after {
+    content: '';
+    animation: loadingDots 1.5s steps(4, end) infinite;
+}
+
+@keyframes loadingDots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+    100% { content: ''; }
 }
 
 .summary-result .summary-text {

@@ -44,8 +44,8 @@ const PRESETS_KEY = 'llm_presets';
 // 기본 프리셋 (API 키 제외)
 const DEFAULT_PRESETS = [
     {
-        name: 'OpenAI GPT-4o Mini',
-        model: 'gpt-4o-mini',
+        name: 'OpenAI GPT-5',
+        model: 'gpt-5',
         customModel: '',
         apiUrl: 'https://api.openai.com/v1',
         apiKey: '',
@@ -316,24 +316,36 @@ async function generateSummary() {
         return `[${time}] ${speaker ? speaker + ': ' : ''}${c.text}`;
     }).join('\n');
 
-    summaryResult.innerHTML = '<span class="placeholder-text">요약 생성 중...</span>';
+    // 로딩 UI 표시
+    summaryResult.innerHTML = `
+        <div class="summary-loading">
+            <div class="spinner"></div>
+            <span class="loading-text">요약 생성 중</span>
+            <span class="loading-dots"></span>
+        </div>
+    `;
     summaryResult.classList.add('loading');
     summaryResult.contentEditable = 'false';
     summaryResult.classList.remove('editable');
     editSummaryBtn.textContent = '편집';
 
+    // 버튼 비활성화
+    summarizeBtn.disabled = true;
+    summarizeBtn.textContent = '생성 중...';
+    verifyBtn.disabled = true;
+
     // 시스템 프롬프트 구성
     let systemPrompt = `당신은 공식 사업 회의록을 작성하는 전문가입니다.
 
 ## 중요 공지
-이 회의록은 공식 문서로 사용되며, 원본 녹취록과 대조하여 검증됩니다.
+이 회의록은 공식 문서로 사용되며, 완성 후 사용자가 직접 출처와 녹취록을 교차로 들으며 검증할 것입니다.
 **누락된 내용이 있으면 안 됩니다.**
 
 ## 필수 규칙
-1. 녹취록에 언급된 모든 내용을 빠짐없이 포함하세요.
+1. 녹취록에 언급된 주요 사항들에 대하여 모두 요약하세요.
 2. 모든 내용에 출처 시간을 [MM:SS] 형식으로 표기하세요.
-3. 여러 시간대를 종합한 경우 [MM:SS, MM:SS] 형식으로 모든 시간을 표기하세요.
-4. 원본의 의미를 임의로 해석하거나 생략하지 마세요.
+3. 여러 시간대를 종합한 경우 [MM:SS], [MM:SS] 형식으로 모든 시간을 표기하세요.
+4. 녹취록이기에 전사가 잘못된 부분이 있을 수 있습니다.
 5. 한국어로 작성하세요.`;
 
     if (template) {
@@ -352,8 +364,11 @@ ${fullText}
         let response;
         let summary;
 
+        log(`Calling LLM API: model=${model}, url=${apiUrl}`, 'info');
+
         if (model.startsWith('gpt')) {
             // OpenAI API
+            log('Using OpenAI API...', 'info');
             response = await fetch(`${apiUrl}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -366,18 +381,29 @@ ${fullText}
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    max_tokens: 2000
+                    max_completion_tokens: 16000
                 })
             });
 
+            log(`OpenAI response status: ${response.status}`, 'info');
             const data = await response.json();
+            log(`OpenAI response data: ${JSON.stringify(data).substring(0, 500)}...`, 'info');
             if (data.error) {
                 throw new Error(data.error.message);
             }
+            // 콘텐츠 필터 확인
+            const finishReason = data.choices?.[0]?.finish_reason;
+            if (finishReason === 'content_filter') {
+                throw new Error('OpenAI 콘텐츠 필터에 의해 차단되었습니다. 다른 모델(Claude 등)을 사용하거나, 민감한 내용이 포함되어 있는지 확인하세요.');
+            }
             summary = data.choices[0].message.content;
+            if (!summary || summary.trim() === '') {
+                throw new Error('API가 빈 응답을 반환했습니다. 다시 시도하거나 다른 모델을 사용해 보세요.');
+            }
 
         } else if (model.startsWith('claude')) {
             // Anthropic API
+            log('Using Anthropic API...', 'info');
             response = await fetch(`${apiUrl}/messages`, {
                 method: 'POST',
                 headers: {
@@ -388,7 +414,7 @@ ${fullText}
                 },
                 body: JSON.stringify({
                     model: getClaudeModelId(model),
-                    max_tokens: 2000,
+                    max_tokens: 16000,
                     system: systemPrompt,
                     messages: [
                         { role: 'user', content: userPrompt }
@@ -396,7 +422,9 @@ ${fullText}
                 })
             });
 
+            log(`Anthropic response status: ${response.status}`, 'info');
             const data = await response.json();
+            log(`Anthropic response data: ${JSON.stringify(data).substring(0, 200)}...`, 'info');
             if (data.error) {
                 throw new Error(data.error.message);
             }
@@ -404,6 +432,7 @@ ${fullText}
 
         } else {
             // Custom API (OpenAI 호환 형식 가정)
+            log('Using Custom API...', 'info');
             response = await fetch(`${apiUrl}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -416,15 +445,24 @@ ${fullText}
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    max_tokens: 2000
+                    max_completion_tokens: 16000
                 })
             });
 
             const data = await response.json();
+            log(`Custom API response: ${JSON.stringify(data).substring(0, 500)}...`, 'info');
             if (data.error) {
                 throw new Error(data.error.message || 'API 오류');
             }
+            // 콘텐츠 필터 확인
+            const finishReason = data.choices?.[0]?.finish_reason;
+            if (finishReason === 'content_filter') {
+                throw new Error('콘텐츠 필터에 의해 차단되었습니다. 다른 모델을 사용해 보세요.');
+            }
             summary = data.choices[0].message.content;
+            if (!summary || summary.trim() === '') {
+                throw new Error('API가 빈 응답을 반환했습니다.');
+            }
         }
 
         // 타임스탬프를 클릭 가능한 링크로 변환
@@ -438,9 +476,15 @@ ${fullText}
 
     } catch (error) {
         log(`Summary error: ${error.message}`, 'error');
+        console.error('Full error:', error);
         summaryResult.innerHTML = `<span class="placeholder-text" style="color: var(--neon-pink);">오류: ${error.message}</span>`;
     } finally {
         summaryResult.classList.remove('loading');
+        // 버튼 상태 복원
+        summarizeBtn.disabled = false;
+        summarizeBtn.textContent = '요약 생성';
+        verifyBtn.disabled = false;
+        log('Summary generation finished', 'info');
     }
 }
 
@@ -622,8 +666,20 @@ async function verifySummary() {
         return `[${time}] ${speaker ? speaker + ': ' : ''}${c.text}`;
     }).join('\n');
 
-    summaryResult.innerHTML = '<span class="placeholder-text">검증 중...</span>';
+    // 로딩 UI 표시
+    summaryResult.innerHTML = `
+        <div class="summary-loading">
+            <div class="spinner"></div>
+            <span class="loading-text">검증 중</span>
+            <span class="loading-dots"></span>
+        </div>
+    `;
     summaryResult.classList.add('loading');
+
+    // 버튼 비활성화
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = '검증 중...';
+    summarizeBtn.disabled = true;
 
     const systemPrompt = `당신은 회의록 검증 전문가입니다.
 
@@ -678,7 +734,7 @@ ${currentSummary}
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    max_tokens: 2000
+                    max_completion_tokens: 16000
                 })
             });
 
@@ -697,7 +753,7 @@ ${currentSummary}
                 },
                 body: JSON.stringify({
                     model: getClaudeModelId(model),
-                    max_tokens: 2000,
+                    max_tokens: 16000,
                     system: systemPrompt,
                     messages: [{ role: 'user', content: userPrompt }]
                 })
@@ -720,7 +776,7 @@ ${currentSummary}
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
                     ],
-                    max_tokens: 2000
+                    max_completion_tokens: 16000
                 })
             });
 
@@ -740,6 +796,10 @@ ${currentSummary}
         summaryResult.innerHTML = `<span class="placeholder-text" style="color: var(--neon-pink);">검증 오류: ${error.message}</span>`;
     } finally {
         summaryResult.classList.remove('loading');
+        // 버튼 상태 복원
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = '검증';
+        summarizeBtn.disabled = false;
     }
 }
 
@@ -1244,14 +1304,22 @@ function transcribeWithSSE(jobId, filename) {
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            log(`SSE [${data.stage}] progress=${data.progress}% msg="${data.message}"`, 'info');
+            log(`SSE [${data.stage}] progress=${data.progress}% msg="${data.message}" duration=${data.duration}`, 'info');
 
             // 오디오 길이로 예상 시간 계산 (CPU: 오디오 길이의 약 1~2배)
-            if (data.duration && !estimatedTotalTime) {
+            if (data.duration && data.duration > 0 && !estimatedTotalTime) {
                 estimatedTotalTime = data.duration * 1.5;
                 log(`Audio duration: ${data.duration.toFixed(1)}s, estimated time: ${estimatedTotalTime.toFixed(1)}s`, 'info');
                 startTime = Date.now(); // 변환 시작 시간 리셋
                 startProgressTimer(); // 시간 기반 진행률 타이머 시작
+            }
+
+            // duration 없을 때 fallback (processing 단계에서)
+            if (data.stage === 'processing' && !estimatedTotalTime) {
+                estimatedTotalTime = 60;  // 기본 1분
+                startTime = Date.now();
+                startProgressTimer();
+                log('Using fallback estimated time: 60s', 'warning');
             }
 
             currentMessage = data.message;
@@ -1305,9 +1373,11 @@ function showProgress(percent, message) {
     const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
     let remainingText = '';
 
-    if (estimatedTotalTime) {
+    if (estimatedTotalTime && estimatedTotalTime > 0) {
         const remaining = Math.max(0, Math.ceil(estimatedTotalTime - elapsed));
         remainingText = remaining > 0 ? formatDuration(remaining) : '거의 완료...';
+    } else {
+        remainingText = '측정 중...';
     }
 
     loading.innerHTML = `
@@ -1321,7 +1391,7 @@ function showProgress(percent, message) {
             </div>
             <div class="progress-time">
                 <span class="time-label">경과: <span id="elapsed-time">${formatDuration(elapsed)}</span></span>
-                ${remainingText ? `<span class="time-label">남은 시간: <span id="remaining-time">${remainingText}</span></span>` : '<span class="time-label">예상 시간 계산 중...</span>'}
+                <span class="time-label">남은 시간: <span id="remaining-time">${remainingText}</span></span>
             </div>
         </div>
     `;
