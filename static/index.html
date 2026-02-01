@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JJablover Note</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- 좌측 사이드바 -->
+        <aside class="sidebar sidebar-left">
+            <div class="sidebar-header">
+                <h1 class="logo" onclick="location.reload()" style="cursor: pointer;">JJablover Note</h1>
+            </div>
+            <div class="note-list">
+                <div class="note-list-header">
+                    <span>최근 노트</span>
+                    <button class="btn-icon" id="newNoteBtn">+</button>
+                </div>
+                <ul id="noteList">
+                </ul>
+            </div>
+            <div class="sidebar-settings">
+                <div class="setting-item">
+                    <label class="setting-label">모델 선택</label>
+                    <select id="modelSelect" class="setting-select">
+                        <option value="openai/whisper-tiny">Tiny (가장 빠름)</option>
+                        <option value="openai/whisper-base" selected>Base (빠름)</option>
+                        <option value="openai/whisper-small">Small (보통)</option>
+                        <option value="openai/whisper-medium">Medium (느림)</option>
+                        <option value="openai/whisper-large-v3">Large-v3 (최고)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">처리 장치</label>
+                    <select id="deviceSelect" class="setting-select">
+                        <option value="auto">자동</option>
+                        <option value="cuda">GPU (CUDA)</option>
+                        <option value="cpu">CPU</option>
+                    </select>
+                    <span id="deviceStatus" class="device-status"></span>
+                </div>
+                <div class="setting-actions">
+                    <button id="applySettingsBtn" class="btn-secondary">설정 적용</button>
+                </div>
+                <div id="settingsStatus" class="settings-status hidden"></div>
+            </div>
+        </aside>
+
+        <!-- 중앙 메인 콘텐츠 -->
+        <main class="main-content">
+            <div class="content-header">
+                <div class="title-container">
+                    <h2 id="noteTitle" class="editable-title" title="클릭하여 제목 수정">새 노트</h2>
+                    <button id="deletNoteBtn" class="btn-icon btn-delete" title="노트 삭제">×</button>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-primary" id="uploadBtn">음성 업로드</button>
+                    <input type="file" id="audioInput" accept=".mp3,.wav,.ogg,.m4a,.flac" hidden>
+                </div>
+            </div>
+
+            <div id="player-section" class="player-section hidden">
+                <audio id="audioPlayer" controls></audio>
+            </div>
+
+            <div class="transcript-container">
+                <div id="loading" class="loading hidden">
+                    <span class="spinner"></span>
+                    <span>음성을 텍스트로 변환 중...</span>
+                </div>
+                <div id="transcript" class="transcript">
+                    <p class="placeholder">음성 파일을 업로드하면 텍스트가 여기에 표시됩니다.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- 우측 사이드바 -->
+        <aside class="sidebar sidebar-right">
+            <div class="sidebar-section">
+                <h3>노트 정보</h3>
+                <div class="info-item">
+                    <span class="info-label">생성일</span>
+                    <span class="info-value" id="infoDate">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">재생 시간</span>
+                    <span class="info-value" id="infoDuration">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">파일명</span>
+                    <span class="info-value" id="infoFilename">-</span>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>AI 요약</h3>
+                <div class="setting-item">
+                    <label class="setting-label">프리셋</label>
+                    <div class="preset-row">
+                        <select id="llmPresetSelect" class="setting-select">
+                            <option value="">선택하세요...</option>
+                        </select>
+                        <button id="deletePresetBtn" class="btn-small btn-danger" title="프리셋 삭제">삭제</button>
+                    </div>
+                    <div class="preset-save-row">
+                        <input type="text" id="presetNameInput" class="setting-input" placeholder="프리셋 이름">
+                        <button id="savePresetBtn" class="btn-small">저장</button>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">LLM 모델</label>
+                    <select id="llmModelSelect" class="setting-select">
+                        <option value="gpt-4o-mini">GPT-4o Mini</option>
+                        <option value="gpt-4o">GPT-4o</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                        <option value="claude-3-5-haiku">Claude 3.5 Haiku</option>
+                        <option value="claude-sonnet-4">Claude Sonnet 4</option>
+                        <option value="custom">직접 입력</option>
+                    </select>
+                </div>
+                <div class="setting-item" id="customModelContainer" style="display: none;">
+                    <label class="setting-label">모델명 직접 입력</label>
+                    <input type="text" id="customModelInput" class="setting-input" placeholder="예: gpt-5, claude-opus-4">
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">API URL</label>
+                    <input type="text" id="llmApiUrl" class="setting-input" placeholder="https://api.openai.com/v1">
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">API Key</label>
+                    <input type="password" id="llmApiKey" class="setting-input" placeholder="sk-...">
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">회의록 템플릿</label>
+                    <textarea id="summaryTemplate" class="setting-textarea" rows="8">## 회의 요약
+
+### 주요 안건
+- (내용) [시간]
+
+### 결정 사항
+- (내용) [시간]
+
+### 액션 아이템
+- [ ] (담당자) (내용) [시간]
+
+### 기타 메모</textarea>
+                    <span class="setting-hint">템플릿을 입력하면 해당 형식으로 요약됩니다. [MM:SS] 형식으로 출처 시간이 표기됩니다.</span>
+                </div>
+                <div class="setting-actions summary-buttons">
+                    <button id="summarizeBtn" class="btn-primary">요약 생성</button>
+                    <button id="verifyBtn" class="btn-secondary">검증</button>
+                </div>
+                <div class="summary-result-container">
+                    <div class="summary-result-header">
+                        <span>요약 결과</span>
+                        <div class="summary-actions">
+                            <button id="editSummaryBtn" class="btn-small">편집</button>
+                            <button id="copySummaryBtn" class="btn-small">복사</button>
+                        </div>
+                    </div>
+                    <div id="summaryResult" class="summary-result">
+                        <span class="placeholder-text">요약을 생성하려면 위 버튼을 클릭하세요</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

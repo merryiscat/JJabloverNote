@@ -1,0 +1,18 @@
+[project]
+name = "jjablover-note"
+version = "0.1.0"
+description = "음성을 텍스트로 변환하고, 화자를 분리하며, AI 요약을 생성하는 웹 앱"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0.0",
+    "python-dotenv>=1.0.0",
+    "transformers>=4.36.0",
+    "torch>=2.1.0",
+    "accelerate>=0.25.0",
+]
+
+[project.optional-dependencies]
+diarization = ["pyannote.audio>=3.1.0"]
+
+[project.scripts]
+dev = "app:main"
