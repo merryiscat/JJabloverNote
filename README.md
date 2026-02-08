@@ -59,23 +59,49 @@ JJabloverNote/
 
 ## 설치 및 실행
 
+### 사전 요구사항
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (Python 패키지 매니저)
+- [ffmpeg](https://ffmpeg.org/) (오디오 변환용)
+- NVIDIA GPU + 드라이버 (GPU 사용 시)
+
 ### 1. 환경 변수 설정
 ```bash
 cp .env.example .env
 # .env 파일에 HuggingFace 토큰 입력
 ```
 
-### 2. 의존성 설치
+### 2. uv로 설치 및 실행
 ```bash
+# 가상환경 생성 (기존 있으면 초기화)
+uv venv --clear
+
+# 의존성 설치 (CUDA PyTorch 자동 적용)
+uv sync
+
+# 화자 분리 기능 포함 설치
+uv sync --extra diarization
+
+# pyannote.audio가 PyTorch를 CPU 버전으로 덮어쓸 수 있으므로 CUDA 재설치
+uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124 --force-reinstall --no-deps
+
+# 서버 실행
+uv run python app.py
+```
+
+### 3. pip으로 설치 (uv 없이)
+```bash
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Mac/Linux
+
 # CUDA 버전 PyTorch (GPU 사용 시)
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # 기본 패키지
 pip install flask python-dotenv transformers accelerate pyannote.audio
-```
 
-### 3. 서버 실행
-```bash
+# 서버 실행
 python app.py
 ```
 
